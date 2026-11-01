@@ -1,0 +1,370 @@
+-- SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+
+-- VARIABLES
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+local visited = {}
+local isActive = false
+local flySpeed = 15
+local collected = 0
+local startTime = 0
+local antiAFK = false
+local collectSound
+
+local function setupCharacter(char)
+	character = char
+	rootPart = char:WaitForChild("HumanoidRootPart")
+	humanoid = char:WaitForChild("Humanoid")
+	visited = {}
+
+	-- recreate sound
+	if collectSound then
+		pcall(function() collectSound:Destroy() end)
+	end
+	collectSound = Instance.new("Sound")
+	collectSound.SoundId = "rbxassetid://12221967"
+	collectSound.Volume = 1
+	collectSound.Parent = rootPart
+end
+
+setupCharacter(character)
+
+player.CharacterAdded:Connect(setupCharacter)
+
+-- ── HALLOWEEN PALETTE ──────────────────────────────────────────
+local C = {
+	BG        = Color3.fromRGB(18,  10,  28),
+	Panel     = Color3.fromRGB(32,  16,  50),
+	Stroke    = Color3.fromRGB(220, 100,  0),
+	AccentA   = Color3.fromRGB(255, 120,  0),
+	AccentB   = Color3.fromRGB(140,  0, 200),
+	TextHi    = Color3.fromRGB(255, 210, 80),
+	TextLo    = Color3.fromRGB(190, 150, 220),
+	BtnOff    = Color3.fromRGB(55,  20,  80),
+	BtnOn     = Color3.fromRGB(180,  60,   0),
+	BtnHover  = Color3.fromRGB(80,  30, 110),
+	Sep       = Color3.fromRGB(120,  50,   0),
+	HideBtn   = Color3.fromRGB(55,  20,  80),
+}
+
+-- ── GUI ───────────────────────────────────────────────────────
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoFarmGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 290, 0, 345)
+frame.Position = UDim2.new(0.5, -145, 0.3, 0)
+frame.BackgroundColor3 = C.BG
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 14)
+
+local outerStroke = Instance.new("UIStroke", frame)
+outerStroke.Color = C.Stroke
+outerStroke.Thickness = 2.5
+
+local topGlow = Instance.new("Frame", frame)
+topGlow.Size = UDim2.new(1, 0, 0, 4)
+topGlow.BackgroundColor3 = C.AccentA
+topGlow.BorderSizePixel = 0
+Instance.new("UICorner", topGlow).CornerRadius = UDim.new(0, 14)
+
+local header = Instance.new("Frame", frame)
+header.Size = UDim2.new(1, 0, 0, 52)
+header.BackgroundColor3 = C.Panel
+header.BorderSizePixel = 0
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 14)
+
+local headerBottom = Instance.new("Frame", header)
+headerBottom.Size = UDim2.new(1, 0, 0.5, 0)
+headerBottom.Position = UDim2.new(0, 0, 0.5, 0)
+headerBottom.BackgroundColor3 = C.Panel
+headerBottom.BorderSizePixel = 0
+
+local icon = Instance.new("TextLabel", header)
+icon.Size = UDim2.new(0, 36, 0, 36)
+icon.Position = UDim2.new(0, 10, 0.5, -18)
+icon.BackgroundTransparency = 1
+icon.Text = "🎃"
+icon.TextSize = 26
+icon.Font = Enum.Font.GothamBold
+
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(1, -56, 1, 0)
+title.Position = UDim2.new(0, 50, 0, 0)
+title.Text = "Halloween AutoFarm"
+title.TextColor3 = C.TextHi
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local sep = Instance.new("Frame", frame)
+sep.Size = UDim2.new(1, -24, 0, 1)
+sep.Position = UDim2.new(0, 12, 0, 54)
+sep.BackgroundColor3 = C.Sep
+sep.BorderSizePixel = 0
+
+local tokiLabel = Instance.new("TextLabel", frame)
+tokiLabel.Size = UDim2.new(1, -24, 0, 22)
+tokiLabel.Position = UDim2.new(0, 12, 0, 60)
+tokiLabel.BackgroundTransparency = 1
+tokiLabel.Text = "🦇  toki says: hello and happy halloween!"
+tokiLabel.TextColor3 = C.AccentB
+tokiLabel.Font = Enum.Font.Gotham
+tokiLabel.TextSize = 12
+tokiLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local function makeButton(yPos, text)
+	local btn = Instance.new("TextButton", frame)
+	btn.Size = UDim2.new(0, 250, 0, 32)
+	btn.Position = UDim2.new(0.5, -125, 0, yPos)
+	btn.Text = text
+	btn.BackgroundColor3 = C.BtnOff
+	btn.TextColor3 = C.TextHi
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 13
+	btn.BorderSizePixel = 0
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 7)
+	local s = Instance.new("UIStroke", btn)
+	s.Color = Color3.fromRGB(120, 40, 0)
+	s.Thickness = 1
+
+	btn.MouseEnter:Connect(function()
+		if btn.BackgroundColor3 ~= C.BtnOn then
+			btn.BackgroundColor3 = C.BtnHover
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if btn.BackgroundColor3 ~= C.BtnOn then
+			btn.BackgroundColor3 = C.BtnOff
+		end
+	end)
+	return btn
+end
+
+local function makeLabel(yPos, text)
+	local lbl = Instance.new("TextLabel", frame)
+	lbl.Size = UDim2.new(0, 250, 0, 20)
+	lbl.Position = UDim2.new(0.5, -125, 0, yPos)
+	lbl.Text = text
+	lbl.BackgroundTransparency = 1
+	lbl.TextColor3 = C.TextLo
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	return lbl
+end
+
+local toggleBtn    = makeButton(90,  "🎃 Auto Farm: OFF")
+local afkBtn       = makeButton(130, "👻 Anti-AFK: OFF")
+local speedBtn     = makeButton(170, "💨 Tween Speed: 15")
+local counterLabel = makeLabel (210, "🍬 Collected: 0")
+local timerLabel   = makeLabel (230, "⏱  Time Active: 0s")
+local rateLabel    = makeLabel (250, "📈 Est. Coins/Hour: 0")
+local resetBtn     = makeButton(275, "🔄 Reset Counter")
+
+local credit = Instance.new("TextLabel", frame)
+credit.Size = UDim2.new(1, -20, 0, 18)
+credit.Position = UDim2.new(0, 10, 1, -22)
+credit.Text = "Made by LiamMm2  🦇"
+credit.TextColor3 = Color3.fromRGB(130, 80, 170)
+credit.BackgroundTransparency = 1
+credit.Font = Enum.Font.Gotham
+credit.TextSize = 11
+credit.TextXAlignment = Enum.TextXAlignment.Right
+
+-- Hide / Show
+local hideBtn = Instance.new("TextButton", gui)
+hideBtn.Size = UDim2.new(0, 120, 0, 34)
+hideBtn.Position = UDim2.new(1, -130, 1, -48)
+hideBtn.Text = "🎃 Hide GUI"
+hideBtn.BackgroundColor3 = C.HideBtn
+hideBtn.TextColor3 = C.TextHi
+hideBtn.Font = Enum.Font.GothamBold
+hideBtn.TextSize = 13
+hideBtn.BorderSizePixel = 0
+Instance.new("UICorner", hideBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", hideBtn).Color = C.Stroke
+
+hideBtn.MouseEnter:Connect(function() hideBtn.BackgroundColor3 = C.BtnHover end)
+hideBtn.MouseLeave:Connect(function() hideBtn.BackgroundColor3 = C.HideBtn end)
+hideBtn.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+	hideBtn.Text = frame.Visible and "🎃 Hide GUI" or "🎃 Show GUI"
+end)
+
+-- Reset
+resetBtn.MouseButton1Click:Connect(function()
+	collected = 0
+	startTime = tick()
+	counterLabel.Text = "🍬 Collected: 0"
+	timerLabel.Text   = "⏱  Time Active: 0s"
+	rateLabel.Text    = "📈 Est. Coins/Hour: 0"
+end)
+
+-- Anti-AFK
+afkBtn.MouseButton1Click:Connect(function()
+	antiAFK = not antiAFK
+	afkBtn.Text = antiAFK and "👻 Anti-AFK: ON" or "👻 Anti-AFK: OFF"
+	afkBtn.BackgroundColor3 = antiAFK and C.BtnOn or C.BtnOff
+end)
+
+player.Idled:Connect(function()
+	if antiAFK then
+		pcall(function()
+			VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+			task.wait(1)
+			VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+		end)
+	end
+end)
+
+-- Noclip while farming
+RunService.Stepped:Connect(function()
+	if isActive and character then
+		for _, v in ipairs(character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CanCollide = false
+			end
+		end
+	end
+end)
+
+-- Speed cycle
+speedBtn.MouseButton1Click:Connect(function()
+	flySpeed = flySpeed + 1
+	if flySpeed > 25 then flySpeed = 10 end
+	speedBtn.Text = "💨 Tween Speed: " .. flySpeed
+end)
+
+-- ── FLY + COLLECT ─────────────────────────────────────────────
+local function tryTouch(coin)
+	if not rootPart or not coin or not coin.Parent then return end
+
+	-- Prefer firetouchinterest (most reliable on executors)
+	if typeof(firetouchinterest) == "function" then
+		pcall(function()
+			firetouchinterest(rootPart, coin, 0)
+			task.wait()
+			firetouchinterest(rootPart, coin, 1)
+		end)
+	end
+end
+
+local function flyTo(pos, speed)
+	if not rootPart or not rootPart.Parent then return false end
+
+	local dist = (pos - rootPart.Position).Magnitude
+	if dist < 1.5 then return true end
+
+	local tween = TweenService:Create(
+		rootPart,
+		TweenInfo.new(math.max(dist / speed, 0.05), Enum.EasingStyle.Linear),
+		{ CFrame = CFrame.new(pos) }
+	)
+	tween:Play()
+
+	local ok = pcall(function()
+		tween.Completed:Wait()
+	end)
+
+	return ok and rootPart and rootPart.Parent
+end
+
+local function getClosestCoin()
+	if not rootPart then return nil end
+
+	local closest, shortest = nil, math.huge
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.Name == "Coin_Server" and obj.CanTouch ~= false then
+			if not visited[obj] then
+				local dist = (obj.Position - rootPart.Position).Magnitude
+				if dist < shortest and dist < 300 then
+					closest = obj
+					shortest = dist
+				end
+			end
+		end
+	end
+	return closest
+end
+
+-- ── TOGGLE ────────────────────────────────────────────────────
+toggleBtn.MouseButton1Click:Connect(function()
+	isActive = not isActive
+	toggleBtn.Text = isActive and "🎃 Auto Farm: ON" or "🎃 Auto Farm: OFF"
+	toggleBtn.BackgroundColor3 = isActive and C.BtnOn or C.BtnOff
+
+	if isActive then
+		collected = 0
+		startTime = tick()
+		visited = {}
+		counterLabel.Text = "🍬 Collected: 0"
+
+		-- Timer
+		task.spawn(function()
+			while isActive do
+				local elapsed = tick() - startTime
+				timerLabel.Text = "⏱  Time Active: " .. math.floor(elapsed) .. "s"
+				local rate = elapsed > 0 and math.floor((collected / elapsed) * 3600) or 0
+				rateLabel.Text = "📈 Est. Coins/Hour: " .. rate
+				task.wait(0.25)
+			end
+		end)
+
+		-- Main farm loop
+		task.spawn(function()
+			while isActive do
+				if not character or not character.Parent or not rootPart or not rootPart.Parent or humanoid.Health <= 0 then
+					task.wait(0.5)
+					continue
+				end
+
+				local coin = getClosestCoin()
+				if coin and coin.Parent then
+					local targetPos = coin.Position + Vector3.new(0, 1.5, 0) -- slight offset
+					local reached = flyTo(targetPos, flySpeed)
+
+					if reached and coin.Parent then
+						tryTouch(coin)
+						task.wait(0.08)
+						tryTouch(coin)
+
+						-- mark visited even if still there (prevent infinite loop on stuck coins)
+						visited[coin] = true
+						collected += 1
+						if collectSound then collectSound:Play() end
+						counterLabel.Text = "🍬 Collected: " .. collected
+					else
+						visited[coin] = true -- skip bad ones
+					end
+				else
+					-- clean dead references occasionally
+					for k in pairs(visited) do
+						if not k.Parent then
+							visited[k] = nil
+						end
+					end
+					task.wait(0.3)
+				end
+
+				task.wait(0.05)
+			end
+		end)
+	end
+end)
+
+print("Halloween AutoFarm loaded ✔")
